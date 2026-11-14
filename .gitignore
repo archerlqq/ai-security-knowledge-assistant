@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 data/feedback.csv
 eval/test-1.md
+.pytest_cache/
+# 个人隐私文件（简历等），不得进入版本库
+_backup_*.docx
+*.docx

@@ -1,0 +1,4 @@
+# 只用于跑评测与测试的最小依赖，避免 CI 装 Streamlit 全家桶
+pytest==8.3.4
+requests==2.34.2
+python-dotenv==1.2.2
