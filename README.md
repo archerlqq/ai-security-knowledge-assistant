@@ -63,7 +63,7 @@
 - Dify：知识库与 RAG 应用搭建
 - Streamlit：前端 Demo
 - Python：API 调用、反馈记录、后续评测脚本
-- Cursor / ChatGPT：AI-assisted coding
+- ChatGPT：AI-assisted coding
 - CSV / Excel：反馈记录与后续 Bad Case 分析
 
 ## 8. 当前项目结构
@@ -115,7 +115,7 @@ ai-security-knowledge-assistant/
 评测体系的第一原则是：**先标证据等级，再谈数值**（定义见 `docs/03-eval-spec.md`）。
 测试集分五层，因为一个集合无法同时回答"会不会用"和"真的会用吗"。
 
-### 9.1 主表（158 条，2026-11-18，三合一口径）
+### 9.1 主表（158 条，三合一口径）
 
 三合一 = 类别对 ∧ 风险对 ∧ 拒答对。它是跨运行最稳定的口径（波动 ≤5pp），因此用来比较系统。
 

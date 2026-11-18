@@ -24,7 +24,6 @@ import argparse
 import csv
 import sys
 import time
-from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -328,7 +327,6 @@ def build_report(results: dict[str, tuple[list[dict], dict]],
     lines = [
         "# 评测报告 v2（分层 · 置信区间 · 成本加权）",
         "",
-        f"- 生成时间：{datetime.now():%Y-%m-%d %H:%M}",
         f"- 被测引擎：`{engine_name}`",
         f"- 关键点匹配：同义扩展匹配（阈值 {COVERAGE_THRESHOLD:.0%}）",
         "- 说明：本报告只呈现自动可算的部分，结论与解读见 `docs/03-eval-spec.md`。",
