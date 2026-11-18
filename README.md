@@ -65,7 +65,6 @@
 - Python：API 调用、反馈记录、后续评测脚本
 - Cursor / ChatGPT：AI-assisted coding
 - CSV / Excel：反馈记录与后续 Bad Case 分析
-- GitHub：项目管理与作品集展示
 
 ## 8. 当前项目结构
 
@@ -74,51 +73,45 @@ ai-security-knowledge-assistant/
 ├── README.md
 ├── requirements.txt
 ├── requirements-dev.txt
-├── .env.example
+├── .env.example.md
 ├── .gitignore
-├── app/
-│   ├── streamlit_app.py
-│   ├── answer_engine.py
-│   ├── dify_client.py
-│   └── feedback_store.py
-├── docs/
-│   ├── PRD-v0.1.md
-│   ├── prompt-design.md
-│   ├── user-scenarios.md
-│   ├── product-positioning.md
-│   ├── ai-product-logic.md
-│   ├── vibe-coding-log.md
-│   ├── eval-spec-v2.md              # 评测规范：证据等级、指标字典、标注规范
-│   └── retrospective-100-percent.md # 复盘：100% 准确率是怎么来的
-├── knowledge-base/
-│   ├── campus-security-knowledge-base.md
+├── app/                          # 产品本体，4 个文件，827 行
+│   ├── streamlit_app.py          # 网页界面：输入、展示、反馈按钮
+│   ├── answer_engine.py          # 引擎：分类、风险、拒答、答案模板
+│   ├── dify_client.py            # Dify API 调用
+│   └── feedback_store.py         # 反馈落 CSV
+├── knowledge-base/               # 5 篇模拟制度语料（供 Dify 检索）
 │   ├── account-security-faq.md
 │   ├── phishing-email-guide.md
 │   ├── data-security-guide.md
 │   ├── permission-application-guide.md
 │   └── ai-safety-boundary.md
-├── eval/
-│   ├── testset.csv                  # 常规集 70 条（L1）
-│   ├── testset-variant.csv          # 口语改写变体 40 条（L2）
-│   ├── testset-hard.csv             # 边界 8 条（L2）
-│   ├── testset-unanswerable.csv     # 知识库外 20 条（L2）
-│   ├── testset-injection.csv        # 提示注入 20 条（L3）
-│   ├── keypoint_synonyms.json       # 关键点同义扩展表
-│   ├── semantic_match.py            # 同义扩展匹配
-│   ├── stats.py                     # Wilson / McNemar / bootstrap / kappa
-│   ├── evaluate_v2.py               # 分层评测主程序
-│   ├── evaluate.py                  # v1 评测（保留用于对照）
-│   ├── evaluate_dify.py             # Dify 通路评测
-│   ├── report-v2.md                 # 自动生成的 v2 报告
-│   └── metrics-report.md            # v1 报告（历史）
+├── docs/                         # 5 份文档，各有唯一用途
+│   ├── 01-product-spec.md        # 产品是什么、给谁、功能与验收
+│   ├── 02-ai-design.md           # RAG 设计、分类/风险/拒答规则、Prompt 全文
+│   ├── 03-eval-spec.md           # 证据等级、指标字典、标注规范
+│   ├── 04-bad-cases.md           # 历史 Bad Case 与 Dify 对照（过程资产）
+│   └── 05-retrospective.md       # 复盘：100% 准确率是怎么来的
+├── eval/                         # 考卷 + 判分器
+│   ├── testset.csv               # 常规集 70 条（L1）
+│   ├── testset-variant.csv       # 口语改写 40 条（L2）
+│   ├── testset-hard.csv          # 边界 8 条（L2）
+│   ├── testset-unanswerable.csv  # 知识库外 20 条（L2）
+│   ├── testset-injection.csv     # 提示注入 20 条（L3）
+│   ├── keypoint_synonyms.json    # 关键点同义扩展表
+│   ├── evaluate_v2.py            # 唯一评测入口（rule / legacy / dify）
+│   ├── baseline.py               # v1 引擎，仅作对照基线
+│   ├── stats.py                  # Wilson / McNemar / bootstrap / kappa
+│   ├── semantic_match.py         # 关键点覆盖判定
+│   └── report-v2.md              # 自动生成的报告
 └── tests/
-    ├── test_answer_engine.py        # 分类/风险/拒答/解析回归
-    └── test_stats.py                # 统计实现自测
+    ├── test_answer_engine.py     # 分类/风险/拒答/解析回归
+    └── test_stats.py             # 统计实现自测
 ```
 
 ## 9. 评测：分层、带区间、可追问
 
-评测体系 v2 的第一原则是：**先标证据等级，再谈数值**。等级定义见 `docs/eval-spec-v2.md`。
+评测体系 v2 的第一原则是：**先标证据等级，再谈数值**。等级定义见 `docs/03-eval-spec.md`。
 把测试集拆成五层，是因为一个集合无法同时回答"会不会用"和"真的会用吗"。
 
 | 集合 | 等级 | n | 分类准确率 | 风险准确率 | 整体正确率（95% CI） | 平均风险成本 |
@@ -148,7 +141,7 @@ ai-security-knowledge-assistant/
 
 v1 报的是"常规集整体正确率 17.1% → 100%、Bad Case 58 → 0"。该数字在 L1 意义上成立，
 但失效于三点：标注与答案模板同源、70 条只跑了规则引擎未跑 LLM、无区间且未区分
-"稳定更好"与"足够好"。完整复盘见 `docs/retrospective-100-percent.md`。
+"稳定更好"与"足够好"。完整复盘见 `docs/05-retrospective.md`。
 
 ### 复现
 

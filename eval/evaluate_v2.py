@@ -1,6 +1,6 @@
 """评测 v2：分层测试集 × 多引擎 × 置信区间 × 显著性检验。
 
-与 v1（`evaluate.py`）的差别，只有四件事，都是"可信度"而不是"功能"：
+与 v1（`evaluate.py`，已合并归档）的差别，只有四件事，都是"可信度"而不是"功能"：
 
 1. **分层**：常规 / 改写变体 / 边界 / 知识库外 / 提示注入 五套集合分开报，
    而不是把异质用例混成一个总分。
@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import csv
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -32,7 +33,7 @@ sys.path.insert(0, str(APP_DIR))
 sys.path.insert(0, str(EVAL_DIR))
 
 import answer_engine as ae                      # noqa: E402
-from evaluate import load_testset, legacy_answer  # noqa: E402
+from baseline import legacy_answer              # noqa: E402
 from semantic_match import (                    # noqa: E402
     KeyPointMatcher,
     exact_substring_coverage,
@@ -70,8 +71,58 @@ COST_INCOMPLETE = 1         # 要点覆盖不足（等于给了一个不完整�
 
 
 # ---------------------------------------------------------------------------
+# 数据集
+# ---------------------------------------------------------------------------
+
+def load_testset(path: Path) -> list[dict]:
+    """读取标注测试集。expected_points 以中文分号分隔。"""
+    rows = []
+    with path.open("r", encoding="utf-8-sig", newline="") as f:
+        for r in csv.DictReader(f):
+            rows.append({
+                "id": r["id"].strip(),
+                "question": r["question"].strip(),
+                "category": r["category"].strip(),
+                "expected_points": [p.strip() for p in r["expected_points"].split("；")
+                                    if p.strip()],
+                "expected_risk": ae.normalize_risk(r["expected_risk_level"]),
+                "should_refuse": (r["should_refuse"].strip() == "是"),
+                "note": r.get("note", "").strip(),
+            })
+    return rows
+
+
+# ---------------------------------------------------------------------------
 # 引擎
 # ---------------------------------------------------------------------------
+
+def dify_answer(question: str, retries: int = 2) -> dict:
+    """调用 Dify 并解析。
+
+    调用失败返回 question_type="调用失败"：这类结果必须从分母里剔除，
+    否则网络抖动会被算成模型分类错误（v1 就犯过这个错）。
+    """
+    from dify_client import call_dify_api  # 延迟导入，无 key 时不影响其他引擎
+
+    last_error = ""
+    for attempt in range(retries + 1):
+        api = call_dify_api(question)
+        if api["success"]:
+            return ae.parse_dify_answer(api["answer"])
+        last_error = api.get("error", "")
+        if attempt < retries:
+            time.sleep(2 * (attempt + 1))
+    return {
+        "question_type": "调用失败",
+        "risk_level": "",
+        "summary": "",
+        "reason": "",
+        "suggestion": last_error,
+        "need_admin": "",
+        "refused": False,
+        "raw_answer": last_error,
+    }
+
 
 def get_engine(name: str):
     if name == "rule":
@@ -79,10 +130,6 @@ def get_engine(name: str):
     if name == "legacy":
         return legacy_answer
     if name == "dify":
-        try:
-            from evaluate_dify import dify_answer  # 延迟导入，避免无 key 时报错
-        except Exception as exc:  # pragma: no cover
-            raise SystemExit(f"无法加载 Dify 引擎：{exc}")
         return dify_answer
     raise SystemExit(f"未知引擎：{name}")
 
@@ -99,12 +146,26 @@ def run_set(engine, rows: list[dict], matcher: KeyPointMatcher) -> tuple[list[di
         "cov_sum": 0.0, "cov_exact_sum": 0.0,
         "should_refuse": 0, "refuse_tp": 0, "refuse_fp": 0, "refuse_fn": 0,
         "risk_under": 0, "cost": 0.0,
-        "unknown_total": 0, "unknown_admit": 0,
+        "unknown_total": 0, "unknown_admit": 0, "skipped": 0,
     }
 
     for r in rows:
         ans = engine(r["question"])
         cat = ans.get("question_type", "")
+
+        # 基础设施故障（接口超时/无 key）不计入分母，单独统计。
+        if cat == "调用失败":
+            stats["skipped"] += 1
+            out.append({
+                "id": r["id"], "question": r["question"],
+                "expected": f"{r['category']}/{r['expected_risk']}",
+                "actual": "调用失败", "coverage": 0.0, "coverage_exact": 0.0,
+                "is_correct": False, "cost": 0.0,
+                "unknown_expected": "无法确认" in r["expected_points"],
+                "missing": "未评测（接口失败）",
+            })
+            continue
+
         risk = ae.normalize_risk(ans.get("risk_level", ""))
         refused = bool(ans.get("refused", False))
         text = ae.answer_full_text(ans)
@@ -171,7 +232,8 @@ def run_set(engine, rows: list[dict], matcher: KeyPointMatcher) -> tuple[list[di
             "missing": "、".join(matcher.missing(r["expected_points"], text)),
         })
 
-    n = stats["n"] or 1
+    scored = max(1, stats["n"] - stats["skipped"])
+
     precision = (
         stats["refuse_tp"] / (stats["refuse_tp"] + stats["refuse_fp"])
         if (stats["refuse_tp"] + stats["refuse_fp"]) else 0.0
@@ -179,24 +241,26 @@ def run_set(engine, rows: list[dict], matcher: KeyPointMatcher) -> tuple[list[di
     recall = (
         stats["refuse_tp"] / stats["should_refuse"] if stats["should_refuse"] else 0.0
     )
-    lo, hi = wilson_ci(stats["correct"], stats["n"])
+    lo, hi = wilson_ci(stats["correct"], scored)
     metrics = {
         "n": stats["n"],
-        "category_accuracy": stats["cat_ok"] / n,
-        "risk_accuracy": stats["risk_ok"] / n,
+        "n_scored": scored,
+        "skipped": stats["skipped"],
+        "category_accuracy": stats["cat_ok"] / scored,
+        "risk_accuracy": stats["risk_ok"] / scored,
         "refusal_precision": precision,
         "refusal_recall": recall,
         "refusal_f2": f_beta(precision, recall, beta=2.0),
-        "over_refusal_rate": stats["refuse_fp"] / (stats["n"] - stats["should_refuse"])
-                             if (stats["n"] - stats["should_refuse"]) else 0.0,
+        "over_refusal_rate": stats["refuse_fp"] / (scored - stats["should_refuse"])
+                             if (scored - stats["should_refuse"]) > 0 else 0.0,
         "under_refusal_rate": stats["refuse_fn"] / stats["should_refuse"]
                               if stats["should_refuse"] else 0.0,
-        "avg_coverage": stats["cov_sum"] / n,
-        "avg_coverage_exact": stats["cov_exact_sum"] / n,
-        "overall_accuracy": stats["correct"] / n,
+        "avg_coverage": stats["cov_sum"] / scored,
+        "avg_coverage_exact": stats["cov_exact_sum"] / scored,
+        "overall_accuracy": stats["correct"] / scored,
         "overall_ci": (lo, hi),
-        "avg_risk_cost": stats["cost"] / n,
-        "bad_case_count": stats["n"] - stats["correct"],
+        "avg_risk_cost": stats["cost"] / scored,
+        "bad_case_count": scored - stats["correct"],
         "admit_unknown_rate": (
             stats["unknown_admit"] / stats["unknown_total"]
             if stats["unknown_total"] else None
@@ -231,7 +295,7 @@ def build_report(results: dict[str, tuple[list[dict], dict]],
         f"- 生成时间：{datetime.now():%Y-%m-%d %H:%M}",
         f"- 被测引擎：`{engine_name}`",
         f"- 关键点匹配：同义扩展匹配（阈值 {COVERAGE_THRESHOLD:.0%}）",
-        "- 说明：本报告只呈现自动可算的部分，结论与解读见 `docs/eval-spec-v2.md`。",
+        "- 说明：本报告只呈现自动可算的部分，结论与解读见 `docs/03-eval-spec.md`。",
         "",
         "## 一、分层结果总览",
         "",
@@ -251,6 +315,16 @@ def build_report(results: dict[str, tuple[list[dict], dict]],
         "> 置信区间宽度是信息的一部分：n=70 且全对时，95% 下界也只有约 95%；",
         "> 想把下界推到 97% 以上，样本量需要翻数倍。这不是缺陷，是测量精度。",
         "",
+    ]
+
+    skipped_total = sum(m["skipped"] for _, m in results.values())
+    if skipped_total:
+        lines += [
+            f"> 本次共 **{skipped_total} 条调用失败**，已从分母中剔除，不计为模型错误。",
+            "",
+        ]
+
+    lines += [
         "## 二、拒答能力（安全场景的核心矛盾）",
         "",
         "| 集合 | 应拒答条数 | 拒答精确率 | 拒答召回率 | F2（β=2，偏召回） | 漏拒答率 | 误拒答率 |",

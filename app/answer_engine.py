@@ -70,11 +70,11 @@ def normalize_risk(value: str) -> str:
     if not v:
         return ""
     v = v.replace("风险", "").replace(" ", "").replace("。", "").replace("，", "")
-    if v in ("低", "低风险"):
+    if v == "低":
         return RISK_LOW
-    if v in ("中", "中风险"):
+    if v == "中":
         return RISK_MEDIUM
-    if v in ("高", "高风险"):
+    if v == "高":
         return RISK_HIGH
     # Fall back to first char if it is a known level.
     for token, level in (("低", RISK_LOW), ("中", RISK_MEDIUM), ("高", RISK_HIGH)):

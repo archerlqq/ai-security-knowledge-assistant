@@ -1,14 +1,17 @@
-# Bad Case 分析文档
+# 04 · Bad Case 分析（v1 阶段记录）
 
-> 本文档记录 AI 安全知识库助手的评测体系、Bad Case 发现过程、根因归因和迭代结论，用于支撑作品集展示与后续优化。
+> 本文档记录 2026-08 至 2026-10 期间的 Bad Case 发现过程、根因归因和迭代结论。
+> **注意**：文中提到的 `evaluate.py`、`metrics-report.md`、`results*.csv` 已在本轮精简中合并/移除，
+> 现行评测入口为 `eval/evaluate_v2.py`，现行规范见 `03-eval-spec.md`，最新结论见 `05-retrospective.md`。
+> 本文保留作为**过程资产**：它记录了「规则引擎为什么会失效」以及 LLM 首次对照的结果，这是复盘的事实基础。
 
-## 1. 评测体系
+## 1. 评测体系（v1）
 
 - 测试集：`eval/testset.csv`（70 条常规标注用例）+ `eval/testset-hard.csv`（8 条边界/对抗用例），共 **78 条**。
-- 评测脚本：`eval/evaluate.py`（离线、确定性、可复现），对比"优化前旧引擎"与"优化后新引擎"。
+- 评测脚本：v1 的 `evaluate.py`（离线、确定性、可复现），对比"优化前旧引擎"与"优化后新引擎"。
 - 评测维度：分类准确率、风险等级准确率、拒答准确率、误拒答率、漏拒答率、关键点覆盖率、整体正确率、Bad Case 占比。
 
-评测结果（自动生成于 `eval/metrics-report.md`）：
+评测结果（当时自动生成的 v1 报告）：
 
 | 指标 | 优化前 | 优化后（常规集） | 优化后（边界集） |
 | --- | --- | --- | --- |
@@ -68,7 +71,7 @@
 
 ## 4. Dify LLM 回归：边界集对比（关键词引擎 vs LLM）
 
-把 8 条边界用例发送到已配置的 Dify RAG 应用（`eval/evaluate_dify.py`），验证 LLM 语义理解能否补上关键词引擎的短板：
+把 8 条边界用例发送到已配置的 Dify RAG 应用（现行入口：`eval/evaluate_v2.py --engine dify`），验证 LLM 语义理解能否补上关键词引擎的短板：
 
 | 指标（边界集 8 条） | 关键词引擎 | Dify LLM |
 | --- | --- | --- |
@@ -107,19 +110,15 @@
 3. **产品方案定型**：主路径用 Dify RAG + LLM 做语义理解与拒答边界，本地关键词引擎作为离线兜底；并对 LLM 的"过度拒答、风险偏高"做 Prompt 微调（把"合法渗透测试需授权"与"危险攻击请求"区分开）。
 4. **评测体系补强**：为 LLM 回答引入 LLM-as-Judge 或人工标注，替换当前只适合规则引擎的精确子串关键点覆盖；并给 Dify 调用加重试。
 
-## 6. 复现方式
+## 6. 复现方式（已迁移）
+
+本节记录的旧命令已失效，现行方式如下：
 
 ```bash
-# 1) 离线评测本地引擎（无需 Dify / 网络）
-python eval/evaluate.py
-
-# 2) Dify RAG 回归（需 .env 配置 DIFY_API_KEY）
-python eval/evaluate_dify.py hard     # 8 条边界用例
-python eval/evaluate_dify.py full     # 70 条常规用例
-
-# 产物
-#   eval/metrics-report.md         本地引擎指标报告（优化前后对比 + 边界集分析）
-#   eval/bad-case-analysis.md       本文档：Bad Case 归因 + Dify 回归结论
-#   eval/results.csv / results-hard.csv                 本地引擎逐条结果
-#   eval/results-dify-hard.csv / bad-cases-dify-hard.csv Dify 逐条结果
+python eval/evaluate_v2.py                  # 分层评测，规则引擎 → eval/report-v2.md
+python eval/evaluate_v2.py --engine legacy  # 旧引擎对照
+python eval/evaluate_v2.py --engine dify    # Dify 通路（需 .env 配置 DIFY_API_KEY）
 ```
+
+本文中的"边界集 8 条"对应 `eval/testset-hard.csv`，"常规集 70 条"对应 `eval/testset.csv`。
+
