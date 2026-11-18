@@ -125,11 +125,14 @@ def dify_answer(question: str, retries: int = 2) -> dict:
     }
 
 
-def llm_answer(question: str) -> dict:
-    """走 OpenAI 兼容模型层（默认 DeepSeek），与 Dify 通路输出同构。"""
+def llm_answer(question: str, prompt_version: str = "v2") -> dict:
+    """走 OpenAI 兼容模型层（默认 DeepSeek），与 Dify 通路输出同构。
+
+    prompt_version 用于消融：v1 是原始 Prompt，v2 加了元指令防护与强制承认未知。
+    """
     from llm_client import chat
 
-    r = chat(question)
+    r = chat(question, prompt_version=prompt_version)
     if not r["success"]:
         return {
             "question_type": "调用失败", "risk_level": "", "summary": "",
@@ -139,7 +142,7 @@ def llm_answer(question: str) -> dict:
     return ae.parse_dify_answer(r["answer"])
 
 
-def get_engine(name: str):
+def get_engine(name: str, prompt_version: str = "v2"):
     if name == "rule":
         return ae.get_mock_answer
     if name == "legacy":
@@ -159,8 +162,8 @@ def get_engine(name: str):
                 "未配置 LLM_API_KEY，无法运行 llm 引擎。\n"
                 "请在 .env 中填写 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL。"
             )
-        print(f"模型：{LLM_MODEL}")
-        return llm_answer
+        print(f"模型：{LLM_MODEL} · Prompt：{prompt_version}")
+        return lambda q: llm_answer(q, prompt_version=prompt_version)
     raise SystemExit(f"未知引擎：{name}")
 
 
@@ -474,13 +477,15 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--engine", default="rule",
                         choices=["rule", "legacy", "dify", "llm"])
+    parser.add_argument("--prompt", default="v2", choices=["v1", "v2"],
+                        help="仅对 llm 引擎生效：选择系统 Prompt 版本，用于消融")
     parser.add_argument("--sets", nargs="*", default=None,
                         help="只跑指定集合，如 --sets variant injection")
     parser.add_argument("--out", default=str(EVAL_DIR / "report-v2.md"))
     args = parser.parse_args()
 
     matcher = KeyPointMatcher()
-    engine = get_engine(args.engine)
+    engine = get_engine(args.engine, args.prompt)
 
     selected = args.sets or list(SETS.keys())
     unknown = [s for s in selected if s not in SETS]
@@ -498,7 +503,8 @@ def main() -> None:
         print(f"[{name}] {len(rows)} 条 · {grade} · 运行中…")
         res, m = run_set(engine, rows, matcher)
         results[name] = (res, m)
-        write_csv(res, EVAL_DIR / f"results-{args.engine}-{name}.csv")
+        tag = args.engine + (f"-{args.prompt}" if args.engine == "llm" else "")
+        write_csv(res, EVAL_DIR / f"results-{tag}-{name}.csv")
         lo, hi = m["overall_ci"]
         print(f"  整体正确率 {pct(m['overall_accuracy'])} "
               f"[{pct(lo)}, {pct(hi)}] · Bad Case {m['bad_case_count']} "
@@ -521,7 +527,8 @@ def main() -> None:
         print(f"配对检验：旧→新 差值 {point * 100:+.1f}pp "
               f"[{lo * 100:+.1f}, {hi * 100:+.1f}]，McNemar p={p:.3g}")
 
-    report = build_report(results, args.engine, mcnemar)
+    engine_label = args.engine + (f"/{args.prompt}" if args.engine == "llm" else "")
+    report = build_report(results, engine_label, mcnemar)
     Path(args.out).write_text(report, encoding="utf-8")
     print(f"\n报告已写入：{args.out}")
 
