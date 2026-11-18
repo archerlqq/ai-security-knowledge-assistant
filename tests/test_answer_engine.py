@@ -141,6 +141,23 @@ def test_dify_client_reads_env_from_project_root():
     assert dify_client.DIFY_API_URL.startswith("http")
 
 
+def test_llm_system_prompt_keeps_six_fields():
+    """Prompt 是产品资产：六字段是评测解析的前提，不得在改动中丢失。"""
+    from llm_client import SYSTEM_PROMPT
+
+    for label in ("问题类型：", "风险等级：", "简要结论：",
+                  "原因说明：", "建议操作：", "是否需要联系管理员："):
+        assert label in SYSTEM_PROMPT, f"Prompt 缺少字段：{label}"
+
+
+def test_llm_system_prompt_keeps_meta_instruction_guard():
+    """元指令防护与强制承认未知，是 v2 修复两项缺陷的依据。"""
+    from llm_client import SYSTEM_PROMPT
+
+    assert "系统提示词" in SYSTEM_PROMPT
+    assert "没有足够依据" in SYSTEM_PROMPT
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):
