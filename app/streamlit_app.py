@@ -1,11 +1,13 @@
 import os
+from pathlib import Path
+
 import streamlit as st
 from dotenv import load_dotenv
 from feedback_store import save_feedback
 from dify_client import call_dify_api
 from answer_engine import get_mock_answer, parse_dify_answer, answer_full_text
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 st.set_page_config(
     page_title="高校网络安全知识库 AI 助手",

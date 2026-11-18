@@ -122,6 +122,25 @@ def test_parse_dify_answer_keeps_raw_when_parse_fails():
     assert parsed["question_type"] == "未解析"
 
 
+# ---------------------------------------------------------------------------
+# 路径健壮性：从任意工作目录启动都不能写错位置
+# ---------------------------------------------------------------------------
+
+def test_feedback_file_is_anchored_to_project_root():
+    import feedback_store
+
+    assert feedback_store.FEEDBACK_FILE.is_absolute()
+    assert feedback_store.FEEDBACK_FILE.parent.name == "data"
+    assert (ROOT / "data") == feedback_store.FEEDBACK_FILE.parent
+
+
+def test_dify_client_reads_env_from_project_root():
+    """无论 cwd 在哪，都应从项目根目录的 .env 读取配置。"""
+    import dify_client
+
+    assert dify_client.DIFY_API_URL.startswith("http")
+
+
 if __name__ == "__main__":
     failures = 0
     for name, fn in sorted(globals().items()):

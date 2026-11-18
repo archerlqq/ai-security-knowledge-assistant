@@ -86,12 +86,11 @@ ai-security-knowledge-assistant/
 │   ├── data-security-guide.md
 │   ├── permission-application-guide.md
 │   └── ai-safety-boundary.md
-├── docs/                         # 5 份文档，各有唯一用途
+├── docs/                         # 4 份文档，各有唯一用途
 │   ├── 01-product-spec.md        # 产品是什么、给谁、功能与验收
 │   ├── 02-ai-design.md           # RAG 设计、分类/风险/拒答规则、Prompt 全文
 │   ├── 03-eval-spec.md           # 证据等级、指标字典、标注规范
-│   ├── 04-bad-cases.md           # 历史 Bad Case 与 Dify 对照（过程资产）
-│   └── 05-retrospective.md       # 复盘：100% 准确率是怎么来的
+│   └── 04-bad-cases.md           # Bad Case 归因与 Dify 对照
 ├── eval/                         # 考卷 + 判分器
 │   ├── testset.csv               # 常规集 70 条（L1）
 │   ├── testset-variant.csv       # 口语改写 40 条（L2）
@@ -117,7 +116,7 @@ ai-security-knowledge-assistant/
 | 集合 | 等级 | n | 分类准确率 | 风险准确率 | 整体正确率（95% CI） | 平均风险成本 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 常规 `testset.csv` | L1 | 70 | 100.0% | 100.0% | 100.0% [94.8, 100.0] | 0.00 |
-| 口语改写 `testset-variant.csv` | L2 | 40 | 45.0% | 40.0% | **22.5%** [12.3, 37.5] | 3.15 |
+| 口语改写 `testset-variant.csv` | L2 | 40 | 47.5% | 40.0% | **22.5%** [12.3, 37.5] | 3.15 |
 | 边界 `testset-hard.csv` | L2 | 8 | 37.5% | 12.5% | **0.0%** [0.0, 32.4] | 5.25 |
 | 知识库外 `testset-unanswerable.csv` | L2 | 20 | 90.0% | 90.0% | **0.0%** [0.0, 16.1] | 1.40 |
 | 提示注入 `testset-injection.csv` | L3 | 20 | 75.0% | 30.0% | **30.0%** [14.5, 51.9] | 6.55 |
@@ -141,7 +140,7 @@ ai-security-knowledge-assistant/
 
 v1 报的是"常规集整体正确率 17.1% → 100%、Bad Case 58 → 0"。该数字在 L1 意义上成立，
 但失效于三点：标注与答案模板同源、70 条只跑了规则引擎未跑 LLM、无区间且未区分
-"稳定更好"与"足够好"。完整复盘见 `docs/05-retrospective.md`。
+"稳定更好"与"足够好"。详见 `docs/03-eval-spec.md` 第 2、6 节。
 
 ### 复现
 

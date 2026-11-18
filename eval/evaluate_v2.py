@@ -130,6 +130,12 @@ def get_engine(name: str):
     if name == "legacy":
         return legacy_answer
     if name == "dify":
+        from dify_client import DIFY_API_KEY
+        if not DIFY_API_KEY:
+            raise SystemExit(
+                "未配置 DIFY_API_KEY，无法运行 dify 引擎。\n"
+                "请先在 .env 中填写密钥，或改用 --engine rule / legacy。"
+            )
         return dify_answer
     raise SystemExit(f"未知引擎：{name}")
 
@@ -299,13 +305,13 @@ def build_report(results: dict[str, tuple[list[dict], dict]],
         "",
         "## 一、分层结果总览",
         "",
-        "| 集合 | 证据等级 | n | 分类准确率 | 风险准确率 | 整体正确率（95% CI） | 平均风险成本 |",
+        "| 集合 | 证据等级 | 有效 n | 分类准确率 | 风险准确率 | 整体正确率（95% CI） | 平均风险成本 |",
         "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     for name, (rows, m) in results.items():
         lo, hi = m["overall_ci"]
         lines.append(
-            f"| {name} | {SETS[name][1]} | {m['n']} | {pct(m['category_accuracy'])} "
+            f"| {name} | {SETS[name][1]} | {m['n_scored']} | {pct(m['category_accuracy'])} "
             f"| {pct(m['risk_accuracy'])} | {pct(m['overall_accuracy'])} "
             f"[{pct(lo)}, {pct(hi)}] | {m['avg_risk_cost']:.2f} |"
         )
@@ -354,8 +360,8 @@ def build_report(results: dict[str, tuple[list[dict], dict]],
 
     lines += [
         "",
-        "> 差值越大，说明「答对了但措辞不同」的情况越多，也说明旧口径对自由文本偏严。",
-        "> 这一列的作用是标记度量的口径风险，而不是证明新口径「更准」。",
+        "> 差值越大，说明答对了但措辞不同的情况越多，也说明旧口径对自由文本偏严。",
+        "> 这一列的作用是标记度量的口径风险，而不是证明新口径更准。",
         "",
         "## 四、知识库外问题：承认未知率",
         "",
@@ -363,7 +369,7 @@ def build_report(results: dict[str, tuple[list[dict], dict]],
 
     got_unknown = False
     unknown_lines = [
-        "| 集合 | 应回答「无法确认」条数 | 实际承认未知 | 承认未知率 |",
+        "| 集合 | 应回答无法确认条数 | 实际承认未知 | 承认未知率 |",
         "| --- | --- | --- | --- |",
     ]
     for name, (rows, m) in results.items():
@@ -381,7 +387,7 @@ def build_report(results: dict[str, tuple[list[dict], dict]],
     lines += [
         "",
         "> 这一项是幻觉的镜像指标：知识库里没有依据时，系统是承认不知道，还是编一个像样的答案。",
-        "> 规则引擎的结构决定了它几乎不会说「不知道」——它只有兜底话术。",
+        "> 规则引擎的结构决定了它几乎不会说不知道——它只有兜底话术。",
         "",
         "## 五、各集合 Bad Case",
         "",
@@ -405,14 +411,14 @@ def build_report(results: dict[str, tuple[list[dict], dict]],
     if mcnemar:
         b, c, p = mcnemar
         lines += [
-            "## 六、旧引擎 vs 规则引擎（常规集，配对检验）",
+            f"## 六、旧引擎 vs {engine_name}（常规集，配对检验）",
             "",
-            f"- 旧引擎对、规则引擎错：{b} 条",
-            f"- 旧引擎错、规则引擎对：{c} 条",
+            f"- 旧引擎对、{engine_name} 错：{b} 条",
+            f"- 旧引擎错、{engine_name} 对：{c} 条",
             f"- McNemar 精确检验 p = {p:.4g}",
             "",
-            "> p 越小说明改进不像是随机波动。但要注意：配对检验只回答「是否稳定更好」，",
-            "> 不回答「是否足够好」——后者要靠变体集和知识库外集证明。",
+            "> p 越小说明改进不像是随机波动。但要注意：配对检验只回答是否稳定更好，",
+            "> 不回答是否足够好——后者要靠变体集和知识库外集证明。",
             "",
         ]
 
@@ -449,6 +455,9 @@ def main() -> None:
     engine = get_engine(args.engine)
 
     selected = args.sets or list(SETS.keys())
+    unknown = [s for s in selected if s not in SETS]
+    if unknown:
+        raise SystemExit(f"未知集合：{unknown}；可选：{list(SETS.keys())}")
     results: dict[str, tuple[list[dict], dict]] = {}
 
     for name in selected:

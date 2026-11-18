@@ -1,8 +1,5 @@
 # 02 · AI 设计与 Prompt
 
-> 本文合并了原 `ai-product-logic.md`、`prompt-design.md`、`vibe-coding-log.md`。
-> 前两者都在讲"分类规则、风险规则、拒答策略"，只是视角不同；后者是工程实现记录，并入附录。
-
 ---
 
 ## 1. AI 能力定位

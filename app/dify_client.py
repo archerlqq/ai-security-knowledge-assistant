@@ -1,8 +1,12 @@
 import os
+from pathlib import Path
+
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+# 显式指定 .env 位置：默认的 load_dotenv() 只查当前工作目录，
+# 从其他目录启动时会读不到密钥，误判为"未配置"。
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 DIFY_API_KEY = os.getenv("DIFY_API_KEY", "")
 DIFY_API_URL = os.getenv("DIFY_API_URL", "https://api.dify.ai/v1/chat-messages")

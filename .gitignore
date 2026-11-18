@@ -10,3 +10,4 @@ _backup_*.docx
 *.docx
 .workbuddy/
 eval/results-*.csv
+.vscode/
